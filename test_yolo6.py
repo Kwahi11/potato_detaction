@@ -1,3 +1,6 @@
+import sys, os
+
+sys.path.append(r"F:\YOLOV8\PotatoDetection-main\unet_pytorch_main")
 import cv2
 import json
 import numpy as np
