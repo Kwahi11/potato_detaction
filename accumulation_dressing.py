@@ -1,5 +1,7 @@
 # -- coding: utf-8 --
+import sys, os
 
+sys.path.append(r"F:\YOLOV8\PotatoDetection-main\unet_pytorch_main")
 import sys
 from ctypes import *
 import datetime
@@ -102,19 +104,26 @@ def compute_axes_and_draw(frame, mask):
         # 射线法寻找真实轮廓交点
         def find_contour_edge(start_x, start_y, direction_angle):
             theta = math.radians(direction_angle)
+            h, w = mask.shape[0], mask.shape[1]
             for d in range(1, 300):
                 x = int(start_x + d * math.cos(theta))
                 y = int(start_y + d * math.sin(theta))
-                if y < 0 or y >= mask.shape[0] or x < 0 or x >= mask.shape[1]:
+                if y < 0 or y >= h or x < 0 or x >= w:
                     break
                 if mask[y, x] == 0:
                     return (x, y)
             for d in range(1, 300):
                 x = int(start_x - d * math.cos(theta))
                 y = int(start_y - d * math.sin(theta))
+                # 边界检查，避免越界访问
+                if y < 0 or y >= h or x < 0 or x >= w:
+                    break
                 if mask[y, x] == 0:
                     return (x, y)
-            return (start_x, start_y)
+            # 若未找到边界，返回限制在图像内的起点
+            sx = max(0, min(w - 1, int(start_x)))
+            sy = max(0, min(h - 1, int(start_y)))
+            return (sx, sy)
 
         # 获取长轴端点
         ptA = find_contour_edge(cx, cy, major_axis_angle)
@@ -374,7 +383,7 @@ def send_stack_status_to_plc(stack_status, plc_enabled):
     # PLC配置（可改为参数）
     PLC_IP = "192.168.1.88"  # 修改为你的实际IP
     PLC_PORT = 502
-    target_register = 2  # 对应 %MW2，拌种之前
+    target_register = 0  # 对应 %MW2，拌种之前
 
     # 建立连接并写入数据
     client = ModbusTcpClient(PLC_IP, port=PLC_PORT)
