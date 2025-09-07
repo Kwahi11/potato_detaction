@@ -1,36 +1,35 @@
-# 本文件实现了打印每次发送时间的功能，将各个操作的时间保存为一个文件
-
-import random
+# 标准库
+import os
 import sys
+import time
+import math
+import json
+import socket
+import random
+import threading
+import collections
+
+# 第三方库
 import cv2
 import numpy as np
-import time
-import collections
-import socket
-import json
-from PyQt5.QtCore import QThread, pyqtSignal, QMutex, QMetaObject
-from PyQt5.QtGui import QImage, QPixmap, QFont
-from PyQt5.QtCore import Qt  # 添加到现有的导入语句中
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QTextEdit, \
-    QGridLayout, QComboBox
-from test_yolo6 import detect_objects
-from ultralytics import YOLO
-from fengzhuangwutu import daoju
-import numpy as np
-import math
-import time
-sys.path.append(r"F:\YOLOV8\PotatoDetection-main\MV Viewer\Development\Samples\Python\IMV\opencv_byGetFrame")
-from open_cv_show1 import *
-import time
-from collections import deque
-import threading
-import time
 from pymodbus.client import ModbusTcpClient
-import os
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMutex, QMetaObject
+from PyQt5.QtGui import QImage, QPixmap, QFont
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QTextEdit, QGridLayout, QComboBox
+from ultralytics import YOLO
+
+# 项目内模块
+from test_yolo6 import detect_objects
+
+# 相机 SDK 示例路径（请确认路径存在）
+sys.path.append(r"F:\YOLOV8\PotatoDetection-main\MV Viewer\Development\Samples\Python\IMV\opencv_byGetFrame")
+from open_cv_show1 import retrun_frame
+
+
 
 plc_mw3_flag = 0  # 默认发0
-plc_enabled = True
-# plc_enabled = False
+plc_enabled = True# plc_enabled = False
+
 
 def send_mw3_value(value, plc_enabled):
     print(f"🛰 writing PLC: %MW3 = {value}")
@@ -87,7 +86,7 @@ class CameraThread(QThread):
         self.mutex = QMutex()
         self.emit_frame = True  # 控制是否发出信号的标志
 
-        self.frame_max_len = 10
+        self.frame_max_len = 10  # 保存最近若干帧，避免阻塞时丢帧
         self.frame_queue = collections.deque(maxlen=self.frame_max_len)
 
     def run(self):
@@ -99,7 +98,7 @@ class CameraThread(QThread):
                 for item in retrun_frame():
                     if not self.running:
                         break
-                    if isinstance(item, (tuple, list)):
+                    if isinstance(item, (tuple, list)):#判断是否返回了相机时间戳
                         if len(item) == 3:
                             ret, frame, ts = item
                         elif len(item) == 2:
@@ -126,8 +125,7 @@ class CameraThread(QThread):
                     finally:
                         self.mutex.unlock()
 
-                    if self.emit_frame:
-                        # 发送帧和时间戳信号
+                    if self.emit_frame:# 发送帧和时间戳信号
                         try:
                             self.frame_signal.emit(self.current_frame)
                         except Exception:
@@ -222,9 +220,8 @@ class YoloThread(QThread):
                 det_begin = time.perf_counter()
                 res = detect_objects(frame, self.model)
                 det_end = time.perf_counter()
-                # ...existing code to unpack...
                 if isinstance(res, tuple) or isinstance(res, list):
-                    if len(res) == 4:
+                    if len(res) == 4:#看是否返回时间戳
                         frame, detections, centroids, det_time = res
                     else:
                         frame, detections, centroids = res
@@ -297,7 +294,7 @@ class YoloThread(QThread):
 
 
 class MyWindow(QWidget):
-    empty_frames_sent = pyqtSignal()  # 声明信号：初始空帧发送完成
+    empty_frames_sent = pyqtSignal()  # 声明信号
     
     def __init__(self):
         super().__init__()
@@ -307,11 +304,7 @@ class MyWindow(QWidget):
         self.priority_direction = "上"
         self.yolo_thread = None
         self.send_data_enabled = True
-        # Socket客户端初始化
         self.socket_client = None
-        # self.robot_ip = "192.168.32.78"  # 机械臂服务器IP
-        # self.robot_port = 3367  # 机械臂服务器端口
-
         self.robot_ip = "192.168.31.139"  # 机械臂服务器IP
         self.robot_port = 3366  # 机械臂服务器端口
         self.frame_num = 0  # 帧计数
@@ -324,7 +317,7 @@ class MyWindow(QWidget):
         self._first_real_det_cached = None  
         # 确保信号已连接（将发送完成信号绑定到继续启动函数）
         try:
-            self.empty_frames_sent.connect(self._continue_start_detection)
+            self.empty_frames_sent.connect(self._continue_start_detection)#转换为真实坐标发送
         except Exception as e:
             print("empty_frames_sent connect failed:", e)
             pass
@@ -351,79 +344,72 @@ class MyWindow(QWidget):
             print(f"连接失败: {e}")
             self.socket_client = None
 
-    def _send_data_frame(self, centroids,current_time):
-        """发送数据帧，刀具角度在第七位"""
-        if not self.send_data_enabled:  # 如果关闭数据发送，直接返回
-            return
-        if not self.socket_client:
-            self._connect_robot()
-            if not self.socket_client:
-                return
+    # def _send_data_frame(self, centroids,current_time):
+    #     """发送数据帧，刀具角度在第七位"""
+    #     if not self.send_data_enabled:  # 如果关闭数据发送，直接返回
+    #         return
+    #     if not self.socket_client:
+    #         self._connect_robot()
+    #         if not self.socket_client:
+    #             return
+    #     try:
+    #         obj_number = len(centroids)
+    #         trigger_time = current_time  # 时间戳
+    #         data_header = f"Data;{self.frame_num};{trigger_time};{obj_number};"
+    #         data_body = []
+    #         # angle=random.randint(10,70)
+    #         for idx, (cx, cy, angle) in enumerate(centroids):
+    #             # dx = 640 - cx  # 第一机械臂的x轴
+    #             dx=cx           #第二个机械臂的X轴
+    #             dy = -cy
+    #             angle=-angle
+    #             # cy-=40
+    #             # dx+=5
+    #             # if angle<=-180 or angle>=180:
+    #             #     angle=0;
+    #             # dx = -415
+    #             # cy = 263
+    #             data_body.append(
+    #                 f"{idx},{dx},{dy},0,0,0,{angle},0,0,0,0,0,no"
+    #                 # f"{idx},{dx},{dy},0,0,0,30,0,0,0,0,0,no"
+    #             )
+    #         # if idx>0:
+    #         #     full_data = "STX" + data_header + "|".join(data_body) + "ETX"
+    #         # else:
+    #         #     full_data = "STX" + data_header + "ETX"
+    #         if(len(data_body)!=0):
+    #              full_data = "STX" + data_header+"|" + "|".join(data_body) + "ETX"
+    #         else:
+    #              full_data = "STX" + data_header + "ETX"
+    #         self.socket_client.sendall(full_data.encode("ascii"))
+    #         self.frame_num += 1
+    #     except Exception as e:
+    #         print(f"发送数据帧失败: {e}")
+    #         self.socket_client.close()
+    #         self.socket_client = None
 
-        try:
-            obj_number = len(centroids)
-            trigger_time = current_time  # 时间戳
-
-            data_header = f"Data;{self.frame_num};{trigger_time};{obj_number};"
-            data_body = []
-            # angle=random.randint(10,70)
-
-            for idx, (cx, cy, angle) in enumerate(centroids):
-                # dx = 640 - cx  # 第一机械臂的x轴
-                dx=cx           #第二个机械臂的X轴
-                dy = -cy
-                angle=-angle
-                # cy-=40
-                # dx+=5
-                # if angle<=-180 or angle>=180:
-                #     angle=0;
-                # dx = -415
-                # cy = 263
-                data_body.append(
-
-                    f"{idx},{dx},{dy},0,0,0,{angle},0,0,0,0,0,no"
-                    # f"{idx},{dx},{dy},0,0,0,30,0,0,0,0,0,no"
-                )
-            # if idx>0:
-            #     full_data = "STX" + data_header + "|".join(data_body) + "ETX"
-            # else:
-            #     full_data = "STX" + data_header + "ETX"
-            if(len(data_body)!=0):
-                 full_data = "STX" + data_header+"|" + "|".join(data_body) + "ETX"
-            else:
-                 full_data = "STX" + data_header + "ETX"
-
-            self.socket_client.sendall(full_data.encode("ascii"))
-            self.frame_num += 1
-
-        except Exception as e:
-            print(f"发送数据帧失败: {e}")
-            self.socket_client.close()
-            self.socket_client = None
-
-    def _send_heartbeat(self):
-        """发送心跳帧"""
-        if not self.send_data_enabled:  # 如果关闭数据发送，直接返回
-            return
-        if not self.socket_client:
-            return
-
-        try:
-            current_time = time.time()
-            if current_time - self.last_heartbeat_time > 60:  # 每分钟发送一次
-                heartbeat_msg = f"Heart;{self.heartbeat_count};"
-                self.socket_client.sendall(heartbeat_msg.encode("ascii"))
-                self.heartbeat_count += 1
-                self.last_heartbeat_time = current_time
-        except Exception as e:
-            print(f"心跳发送失败: {e}")
-            self.socket_client.close()
-            self.socket_client = None
+    # def _send_heartbeat(self):
+    #     """发送心跳帧"""
+    #     if not self.send_data_enabled:  # 如果关闭数据发送，直接返回
+    #         return
+    #     if not self.socket_client:
+    #         return
+    #     try:
+    #         current_time = time.time()
+    #         if current_time - self.last_heartbeat_time > 60:  # 每分钟发送一次
+    #             heartbeat_msg = f"Heart;{self.heartbeat_count};"
+    #             self.socket_client.sendall(heartbeat_msg.encode("ascii"))
+    #             self.heartbeat_count += 1
+    #             self.last_heartbeat_time = current_time
+    #     except Exception as e:
+    #         print(f"心跳发送失败: {e}")
+    #         self.socket_client.close()
+    #         self.socket_client = None
 
     def initUI(self):
         self.setWindowTitle("马铃薯芽眼识别程序")
         # self.setGeometry(100, 100, 900, 600)
-        self.resize(1200, 800)
+        self.resize(1200, 800)#触摸屏1024*768
         self.center_window()
         self.setStyleSheet("background-color: #2E2E2E; color: white;")
 
@@ -445,8 +431,7 @@ class MyWindow(QWidget):
         self.info_labels = {}
         info_titles = ["类别", "置信度", "X1", "Y1", "X2", "Y2", "中心坐标X", "中心坐标Y", "优先目标中心X",
                        "优先目标中心Y", "刀具旋转角度"]
-
-        # info_titles = ["类别", "置信度", "X1", "Y1", "X2", "Y2", "中心坐标X", "中心坐标Y", "刀具旋转角度"]
+        
         for i, title in enumerate(info_titles):
             label = QLabel(f"{title}：")
             label.setFont(QFont("Arial", 14, QFont.Bold))
@@ -571,14 +556,14 @@ class MyWindow(QWidget):
         self._initial_empty_phase = True
         _append_send_log(f"phase_start_detection,{time.perf_counter():.6f}")
         try:
-            if not self.yolo_thread or not self.yolo_thread.isRunning():
+            if not self.yolo_thread or not self.yolo_thread.isRunning():#保证先不开检测
                 _append_send_log(f"warm_yolo_thread_start,{time.perf_counter():.6f}")
                 self.yolo_thread = YoloThread(self.camera_thread)
                 self.yolo_thread.detection_signal.connect(self.update_detections)
                 self.yolo_thread.frame_signal.connect(self.update_camera_frame)
                 self.yolo_thread.start()
                 try:
-                    self.camera_thread.set_emit_frame(False)
+                    self.camera_thread.set_emit_frame(False)#此时把camera_thread的发帧关掉
                     _append_send_log(f"cam_gui_emit_off,{time.perf_counter():.6f}")
                 except Exception:
                     pass
@@ -833,17 +818,6 @@ class MyWindow(QWidget):
         print("检测已停止")
 
     def update_camera_frame(self, frame):
-        # height, width, channel = frame.shape
-        # bytes_per_line = 3 * width
-        # q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888).rgbSwapped()
-        # pixmap = QPixmap.fromImage(q_image)
-        # scaled_pixmap = pixmap.scaled(
-        #     self.video_label.width(),
-        #     self.video_label.height(),
-        #     Qt.KeepAspectRatio,  # 保持宽高比
-        #     Qt.SmoothTransformation  # 平滑变换
-        # )
-        # self.video_label.setPixmap(scaled_pixmap)
         try:
             # 深拷贝，避免下一帧覆写底层缓冲导致撕裂
             # 同时转 RGB，替代 rgbSwapped()
@@ -865,7 +839,7 @@ class MyWindow(QWidget):
             self.video_label.setPixmap(scaled_pixmap)
         except Exception as e:
             _append_send_log(f"update_frame_err,{time.perf_counter():.6f},{repr(e)}")
-# ...existing code...
+
 
 
     def update_detections(self, detections, centroids, ts_ms):
@@ -878,7 +852,7 @@ class MyWindow(QWidget):
         except Exception:
             pass
         
-        if self._initial_empty_phase:
+        if self._initial_empty_phase:#预热阶段，发空坐标
             self._first_real_det_cached = (centroids, ts_ms)
             return
 
