@@ -10,6 +10,13 @@ import time
 from unet import Unet  # 确保正确导入Unet类
 from PIL import Image
 
+# 面积阈值（像素），≥该值输出 15，否则输出 5；按分辨率与镜头调整
+MIN_CONTOUR_AREA = 20000       # 去噪下限（你原先的过滤值）
+POTATO_AREA_THRESHOLD = 36000 # 大小判定阈值（示例值，需按实际调参）
+DEBOUNCE_N = 3
+_size_code_stable = None
+_switch_counter = 0
+
 # 初始化Unet模型
 unet_detector = Unet(
     model_path='ep010-loss0.025-val_loss0.019.pth',
@@ -92,7 +99,7 @@ def detect_objects(frame, model):
     # 检查形心是否在马铃薯（类别为0）的目标框内，只考虑置信度高于阈值的土豆
     valid_potatoes = [d for d in detections if d["cls"] == 0 and d["conf"] >= confidence_threshold]
     for centroid in centroids:
-        cx, cy, angle = centroid
+        cx, cy, angle,sizeCode = centroid
         for detection in valid_potatoes:
             x1, y1, x2, y2 = detection["x1"], detection["y1"], detection["x2"], detection["y2"]
             if x1 <= cx <= x2 and y1 <= cy <= y2:
@@ -100,7 +107,7 @@ def detect_objects(frame, model):
                 break
 
     # 在画面上绘制形心
-    for cx, cy, angle in centroids:
+    for cx, cy, angle,sizeCode in centroids:
         cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)  # 画红色圆点
         cv2.putText(frame, f"({cx}, {cy})", (cx + 10, cy - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
@@ -147,6 +154,7 @@ def compute_centroids(frame):
             # 5. 遍历轮廓计算形心并绘制蓝色点
             for cnt in contours:
                 # 过滤掉过小的轮廓（可选）
+                area = cv2.contourArea(cnt)
                 if cv2.contourArea(cnt) < 20000:  # 根据需要调整最小面积阈值
                     continue
                 # if len(cnt) < 5:
@@ -248,9 +256,12 @@ def compute_centroids(frame):
 
 
                             if min_rotation_angle:
-
-                               centroids.append((cx, cy,min_rotation_angle))
-                               x_old=x_new
+                                # 面积大小判定：≥阈值输出 15，否则 5
+                                size_code = get_stable_size_code(area)
+                                print(f"面积={int(area)} -> 输出={size_code}") 
+                                centroids.append((cx, cy, min_rotation_angle, size_code))
+                                x_old = x_new
+                              
                             # else:
                             #     centroids.append(cx,cy,0)
                             # for i in stack:
@@ -270,3 +281,23 @@ def compute_centroids(frame):
 
 
 
+def get_stable_size_code(area: float) -> int:
+    """面积→size_code(15/5) 的最简去抖"""
+    global _size_code_stable, _switch_counter
+    try:
+        threshold = POTATO_AREA_THRESHOLD
+    except NameError:
+        threshold = 36000  # 若未定义，给个默认
+
+    inst = 15 if area >= threshold else 5
+
+    if _size_code_stable is None or inst == _size_code_stable:
+        _size_code_stable = inst
+        _switch_counter = 0
+        return _size_code_stable
+
+    _switch_counter += 1
+    if _switch_counter >= DEBOUNCE_N:
+        _size_code_stable = inst
+        _switch_counter = 0
+    return _size_code_stable

@@ -745,8 +745,8 @@ class MyWindow(QWidget):
         # 组包
         data_header = f"Data;{cur_frame_num};{current_time};{obj_number};"
         body_parts = []
-        for idx,(cx,cy,angle) in enumerate(centroids):
-            body_parts.append(f"{idx},{cx},{-cy},0,0,0,{-angle},0,0,0,0,0,no")
+        for idx,(cx,cy,angle,size) in enumerate(centroids):
+            body_parts.append(f"{idx},{cx},{-cy},0,0,0,{-angle},0,0,0,0,{size},no")
         if body_parts:
             full_data = "STX" + data_header + "|" + "|".join(body_parts) + "ETX"
         else:
@@ -901,7 +901,7 @@ class MyWindow(QWidget):
             # print("target_angle:", centroids[2])
 
             if centroids:
-                centroid_text = "\\n".join([f"形心: ({cx}, {cy})" for cx, cy, angle in centroids])
+                centroid_text = "\\n".join([f"形心: ({cx}, {cy})" for cx, cy, angle,size in centroids])
                 self.result_text.setPlainText(centroid_text)  # 更新 UI 显示
             else:
                 self.result_text.clear()
