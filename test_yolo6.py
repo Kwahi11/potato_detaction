@@ -12,7 +12,7 @@ from PIL import Image
 
 # 面积阈值（像素），≥该值输出 15，否则输出 5；按分辨率与镜头调整
 MIN_CONTOUR_AREA = 20000       # 去噪下限（你原先的过滤值）
-POTATO_AREA_THRESHOLD = 60000 # 大小判定阈值（示例值，需按实际调参）
+POTATO_AREA_THRESHOLD = 30000 # 大小判定阈值（示例值，需按实际调参）
 DEBOUNCE_N = 1
 _size_code_stable = None
 _switch_counter = 0
@@ -155,7 +155,7 @@ def compute_centroids(frame):
             for cnt in contours:
                 # 过滤掉过小的轮廓（可选）
                 
-                if cv2.contourArea(cnt) < 20000:  # 根据需要调整最小面积阈值
+                if cv2.contourArea(cnt) < 10000:  # 根据需要调整最小面积阈值
                     continue
                 M = cv2.moments(cnt)
 
