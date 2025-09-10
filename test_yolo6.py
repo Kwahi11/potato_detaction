@@ -12,8 +12,8 @@ from PIL import Image
 
 # 面积阈值（像素），≥该值输出 15，否则输出 5；按分辨率与镜头调整
 MIN_CONTOUR_AREA = 20000       # 去噪下限（你原先的过滤值）
-POTATO_AREA_THRESHOLD = 36000 # 大小判定阈值（示例值，需按实际调参）
-DEBOUNCE_N = 3
+POTATO_AREA_THRESHOLD = 60000 # 大小判定阈值（示例值，需按实际调参）
+DEBOUNCE_N = 1
 _size_code_stable = None
 _switch_counter = 0
 
@@ -154,14 +154,9 @@ def compute_centroids(frame):
             # 5. 遍历轮廓计算形心并绘制蓝色点
             for cnt in contours:
                 # 过滤掉过小的轮廓（可选）
-                area = cv2.contourArea(cnt)
+                
                 if cv2.contourArea(cnt) < 20000:  # 根据需要调整最小面积阈值
                     continue
-                # if len(cnt) < 5:
-                #
-                #     continue
-
-                # 计算轮廓的矩
                 M = cv2.moments(cnt)
 
                 def find_contour_edge(start_x, start_y, direction_angle):
@@ -185,82 +180,78 @@ def compute_centroids(frame):
                     cy = int(M['m01'] / M['m00'])
                     x_new=cx
                     if 350 <= cy <= 650:
-                    # if True:
+                        area = cv2.contourArea(cnt)           
+                        # # # 计算轮廓的长轴和方向
+                        ellipse = cv2.fitEllipse(cnt)
+                        (center, axes, angle) = ellipse
+                        major_axis_length = max(axes)  # 最长轴的长度
+                        half_major_axis_length = major_axis_length / 2
+                        rad_angle = math.radians(angle + 90)  # 调整角度以匹配长轴方向
+
+                        # 计算长轴两端点
+                        x_end_1 = int(center[0] + half_major_axis_length * math.cos(rad_angle))
+                        y_end_1 = int(center[1] + half_major_axis_length * math.sin(rad_angle))
+                        x_end_2 = int(center[0] - half_major_axis_length * math.cos(rad_angle))
+                        y_end_2 = int(center[1] - half_major_axis_length * math.sin(rad_angle))
+
+                        if x_end_2 != x_end_1:
+                            m2 = (y_end_2 - y_end_1) / (x_end_2 - x_end_1)
+                            theta2 = math.degrees(math.atan(m2))
+                            # 计算两个角度之间的差值
+                            theta2 = (theta2 + 180) % 360 - 180
+                            angle_diff = theta2 - theta1
+                        else:
+                            # 使用默认角度值
+                            angle_diff = -64.7
+
+                        min_rotation_angle = angle_diff
+                        if min_rotation_angle < -90:
+                            min_rotation_angle = 180 + min_rotation_angle
+                        if min_rotation_angle>90:
+                            min_rotation_angle=min_rotation_angle-180
+                        # min_rotation_angle=-min_rotation_angle
+
+                                # 确保每个形心都有对应的角度
+                                # angles.append(min_rotation_angle)
+                                # if min_rotation_angle and abs(x_new-x_old)>20:
+
+                                ###################################################################################
+                        #         ellipse = cv2.fitEllipse(cnt)
+                        #         (_, axes, angle) = ellipse
+                        #         major_axis_angle = angle + 90  # 实际长轴角度
+                        # # 获取长轴端点
+                        #         ptA = find_contour_edge(cx, cy, major_axis_angle)
+                        #         ptB = find_contour_edge(cx, cy, major_axis_angle + 180)
+                        #
+                        # # 计算形心到端点的距离
+                        #         distA = math.hypot(ptA[0] - cx, ptA[1] - cy)
+                        #         distB = math.hypot(ptB[0] - cx, ptB[1] - cy)
+                        #         print(distA)
+                        #         print(distB)
+                        #         # 确定基准方向（指向更远端点）
+                        #         if distA > distB:
+                        #
+                        #             base_angle = math.degrees(math.atan2(ptB[1] - cy, ptB[0] - cx))
+                        #             # cv2.line(frame, (cx, cy), ptB, (255, 0, 0), 3)
+                        #         else:
+                        #             base_angle = math.degrees(math.atan2(ptA[1] - cy, ptA[0] - cx))
+                        #             # cv2.line(frame, (cx, cy), ptA, (255, 0, 0), 3)  # 蓝色基准线
+                        #
+                        #         # 计算最终角度
+                        #         theta2 = base_angle
+                        #         angle_diff = theta2 - theta1
+                        #         min_rotation_angle =(angle_diff + 180) % 360 - 180
+                                # final_angle = normalize_angle(rotation_angle)
 
 
 
 
-                            # # # 计算轮廓的长轴和方向
-                            ellipse = cv2.fitEllipse(cnt)
-                            (center, axes, angle) = ellipse
-                            major_axis_length = max(axes)  # 最长轴的长度
-                            half_major_axis_length = major_axis_length / 2
-                            rad_angle = math.radians(angle + 90)  # 调整角度以匹配长轴方向
-
-                            # 计算长轴两端点
-                            x_end_1 = int(center[0] + half_major_axis_length * math.cos(rad_angle))
-                            y_end_1 = int(center[1] + half_major_axis_length * math.sin(rad_angle))
-                            x_end_2 = int(center[0] - half_major_axis_length * math.cos(rad_angle))
-                            y_end_2 = int(center[1] - half_major_axis_length * math.sin(rad_angle))
-
-                            if x_end_2 != x_end_1:
-                                m2 = (y_end_2 - y_end_1) / (x_end_2 - x_end_1)
-                                theta2 = math.degrees(math.atan(m2))
-                                # 计算两个角度之间的差值
-                                theta2 = (theta2 + 180) % 360 - 180
-                                angle_diff = theta2 - theta1
-                            else:
-                                # 使用默认角度值
-                                angle_diff = -64.7
-
-                            min_rotation_angle = angle_diff
-                            if min_rotation_angle < -90:
-                                min_rotation_angle = 180 + min_rotation_angle
-                            if min_rotation_angle>90:
-                                min_rotation_angle=min_rotation_angle-180
-                            # min_rotation_angle=-min_rotation_angle
-
-                            # 确保每个形心都有对应的角度
-                            # angles.append(min_rotation_angle)
-                            # if min_rotation_angle and abs(x_new-x_old)>20:
-
-                            ###################################################################################
-                    #         ellipse = cv2.fitEllipse(cnt)
-                    #         (_, axes, angle) = ellipse
-                    #         major_axis_angle = angle + 90  # 实际长轴角度
-                    # # 获取长轴端点
-                    #         ptA = find_contour_edge(cx, cy, major_axis_angle)
-                    #         ptB = find_contour_edge(cx, cy, major_axis_angle + 180)
-                    #
-                    # # 计算形心到端点的距离
-                    #         distA = math.hypot(ptA[0] - cx, ptA[1] - cy)
-                    #         distB = math.hypot(ptB[0] - cx, ptB[1] - cy)
-                    #         print(distA)
-                    #         print(distB)
-                    #         # 确定基准方向（指向更远端点）
-                    #         if distA > distB:
-                    #
-                    #             base_angle = math.degrees(math.atan2(ptB[1] - cy, ptB[0] - cx))
-                    #             # cv2.line(frame, (cx, cy), ptB, (255, 0, 0), 3)
-                    #         else:
-                    #             base_angle = math.degrees(math.atan2(ptA[1] - cy, ptA[0] - cx))
-                    #             # cv2.line(frame, (cx, cy), ptA, (255, 0, 0), 3)  # 蓝色基准线
-                    #
-                    #         # 计算最终角度
-                    #         theta2 = base_angle
-                    #         angle_diff = theta2 - theta1
-                    #         min_rotation_angle =(angle_diff + 180) % 360 - 180
-                            # final_angle = normalize_angle(rotation_angle)
-
-
-
-
-                            if min_rotation_angle:
-                                # 面积大小判定：≥阈值输出 15，否则 5
-                                size_code = get_stable_size_code(area)
-                                print(f"面积={int(area)} -> 输出={size_code}") 
-                                centroids.append((cx, cy, min_rotation_angle, size_code))
-                                x_old = x_new
+                        if min_rotation_angle:
+                            # 面积大小判定：≥阈值输出 15，否则 5
+                            size_code = get_stable_size_code(area)
+                            print(f"面积={int(area)} -> 输出={size_code}") 
+                            centroids.append((cx, cy, min_rotation_angle, size_code))
+                            x_old = x_new
                               
                             # else:
                             #     centroids.append(cx,cy,0)

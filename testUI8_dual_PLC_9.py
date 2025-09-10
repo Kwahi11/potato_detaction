@@ -932,5 +932,5 @@ if __name__ == "__main__":
 
     window.show()
 
-    threading.Thread(target=mw3_loop_thread, daemon=True).start()
+    # threading.Thread(target=mw3_loop_thread, daemon=True).start()
     sys.exit(app.exec_())
