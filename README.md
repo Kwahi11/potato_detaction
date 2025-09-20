@@ -1,6 +1,7 @@
 # 马铃薯芽眼识别程序（Windows）
 
-本项目基于 PyQt5 + OpenCV + Ultralytics YOLO。程序启动后可打开摄像头、进行目标检测，并通过 TCP/Modbus 与机械臂/PLC 通信。
+本项目基于 PyQt5 + OpenCV + Ultralytics YOLO来实现识别土豆芽眼和轮廓，计算土豆的坐标并使用socket套字节发送给并联机械臂，让机械臂去将土豆切块。
+程序启动后可打开摄像头、进行目标检测，并通过 TCP/Modbus 与机械臂/PLC 通信。
 
 ## 1. 环境要求
 
